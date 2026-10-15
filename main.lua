@@ -93,6 +93,10 @@ end)
 local _load_last = ya.sync(function(state)
 	ps.sub_remote("@bookmarks-last", function(body)
 		state.last_dir = body
+		-- the persisted entry keeps the key it was saved with; use the configured one
+		if state.last_dir then
+			state.last_dir.on = state.last_key
+		end
 
 		if state.last_mode ~= "dir" then
 			ps.unsub_remote("@bookmarks-last")
@@ -104,7 +108,7 @@ local _save_last = ya.sync(function(state, persist, imediate)
 	local file = _get_bookmark_file()
 
 	local curr = {
-		on = "'",
+		on = state.last_key,
 		desc = _generate_description(file),
 		path = tostring(file.url),
 		is_parent = file.is_parent,
@@ -129,6 +133,9 @@ local save_last_dir = ya.sync(function(state)
 	ps.sub("cd", function() _save_last(state.last_persist, false) end)
 
 	ps.sub("hover", function()
+		if not state.curr_dir then
+			return
+		end
 		local file = _get_bookmark_file()
 		state.curr_dir.desc = _generate_description(file)
 		state.curr_dir.path = tostring(file.url)
@@ -319,32 +326,24 @@ return {
 		end
 	end,
 	setup = function(state, args)
-		if not args then
-			return
-		end
+		args = args or {}
 
-		if type(args.last_directory) == "table" then
-			if args.last_directory.enable then
-				if args.last_directory.mode == "mark" then
-					state.last_persist = args.last_directory.persist
-					state.last_mode = "mark"
-				elseif args.last_directory.mode == "jump" then
-					state.last_persist = args.last_directory.persist
-					state.last_mode = "jump"
-				elseif args.last_directory.mode == "dir" then
-					state.last_persist = args.last_directory.persist
-					state.last_mode = "dir"
-					save_last_dir()
-				else
-					-- default
-					state.last_persist = args.last_directory.persist
-					state.last_mode = "dir"
-					save_last_dir()
-				end
+		local last_directory = type(args.last_directory) == "table" and args.last_directory or {}
+		if last_directory.enable ~= false then
+			state.last_key = type(last_directory.key) == "string" and last_directory.key or "'"
+			state.last_persist = last_directory.persist
+			if last_directory.mode == "mark" then
+				state.last_mode = "mark"
+			elseif last_directory.mode == "jump" then
+				state.last_mode = "jump"
+			else
+				-- default
+				state.last_mode = "dir"
+				save_last_dir()
+			end
 
-				if args.last_directory.persist then
-					_load_last()
-				end
+			if last_directory.persist then
+				_load_last()
 			end
 		end
 
